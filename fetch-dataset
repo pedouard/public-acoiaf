@@ -1,0 +1,155 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import os
+import sys
+import re
+import json
+import gzip
+import requests
+import time
+import datetime
+
+import numpy as np
+
+# https://www.codingame.com/forum/t/public-api-for-statistics-or-other-useful-things/1247/6
+
+__DIR__ = os.path.dirname(os.path.abspath(__file__))
+
+BASE_URL = "https://www.codingame.com/services/"
+#GET_LEADERBOARD_URL =  BASE_URL + "LeaderboardsRemoteService/getFilteredPuzzleLeaderboard"
+GET_LEADERBOARD_URL =  BASE_URL + "LeaderboardsRemoteService/getFilteredChallengeLeaderboard"
+LIST_GAMES_URL =  BASE_URL + "gamesPlayersRankingRemoteService/findLastBattlesByAgentId"
+REPLAY_URL = BASE_URL + 'gameResultRemoteService/findInformationById'
+TARGET_DIR = os.path.join(__DIR__, "./datasets/raw_games")
+
+TOP = 200
+SESSION = "6f19ab54fd761c7c30ff60631069c4827845761"
+GAME = "a-code-of-ice-and-fire"
+LEADERBOARD_PARAMS = [GAME, SESSION, "global",{"active":False,"column":"","filter":""}]
+
+def log(s):
+    print "[%s] %s" % (datetime.datetime.now(), s)
+
+def clean_name(name):
+    return re.sub(r'[^a-z]', '', name.lower())
+
+
+def load_replay(gameid):
+    res = requests.post(REPLAY_URL, json = [gameid, None], timeout=10)
+
+    res = res.json()["success"]
+    gr = res['gameResult']
+
+    del(gr['gameId'])
+    #del(gr['agents'])
+    del(gr['metadata'])
+
+    frames = []
+    for f in gr["frames"]:
+
+        if "stdout" in f.keys():
+
+            lvl = 0
+            if "UNIT_1_" in f["view"]:
+                lvl = 1
+            elif "UNIT_2_" in f["view"]:
+                lvl = 2
+            elif "UNIT_3_" in f["view"]:
+                lvl = 3
+
+            frames.append({
+                "summary": f["summary"],
+                "agentid": f["agentId"],
+                "lvl": lvl,
+                })
+
+        else:
+            grid = np.zeros((12, 12))
+            tmp = f["view"].split("\n")[1]
+            tmp = json.loads(tmp)
+
+            tooltips = tmp["frame"]["tooltips"][0]
+
+            for k in tooltips.keys():
+                v = tooltips[k].split('\n')
+                x = int(v[-2].split(' ')[-1])
+                y = int(v[-1].split(' ')[-1])
+
+                if "MINE" in v[0]:
+                    grid[x, y] = 2
+                elif "HQ" in v[0]:
+                    grid[x, y] = 3
+                elif grid[x, y] == 0:
+                    grid[x, y] = 1
+
+            gr["grid"] = grid.tolist()
+
+    gr["frames"] = frames
+    return gr
+
+
+def get_games(agentid):
+    r = requests.post(url=LIST_GAMES_URL, json=[agentid, None])
+    try:
+        res = r.json()["success"]
+    except Exception, e:
+        log("Failed to fetch games, server responded with '%s'" % r.json())
+        exit()
+
+    return [b['gameId'] for b in res]
+
+
+def get_leaderboard():
+    r = requests.post(url=GET_LEADERBOARD_URL, json=LEADERBOARD_PARAMS)
+    try:
+        res = r.json()["success"]["users"]
+    except Exception, e:
+        log("Failed to fetch leaderboard, server responded with '%s'" % res)
+        exit()
+
+    return [[clean_name(u["pseudo"]), u["agentId"], None] for u in res if 'pseudo' in u]
+
+
+if not os.path.exists(TARGET_DIR):
+    os.makedirs(TARGET_DIR)
+
+log("Fetching leaderboard...")
+leaderboard = get_leaderboard()[:TOP]
+
+log("Fetching games for the top %d..." % TOP)
+for user in leaderboard:
+    user[2] = get_games(user[1])
+    log("Found %d games for user %s" % (len(user[2]), user[0]))
+
+i = 0
+for player in leaderboard:
+    pseudo, userid, gameids = player
+
+    for gameid in gameids:
+
+        filename = "%s_%d_%d.json" % (pseudo, userid, gameid)
+        path = os.path.join(TARGET_DIR, filename)
+
+        if os.path.exists(path + ".gz"):
+            i += 1
+            print "Already exists"
+            continue
+
+        log("Fetching game %d"% gameid)
+
+        try:
+            replay = load_replay(gameid)
+            replay["ts"] = time.time()
+
+        except Exception, e:
+            log("Failed to load replay: %s" % e)
+            continue
+
+        with gzip.open(path + ".gz", 'wb') as f:
+            f.write(json.dumps(replay).encode())
+
+        i += 1
+        log("downloaded %d" % i)
+
+
+

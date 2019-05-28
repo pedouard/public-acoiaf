@@ -1,0 +1,65 @@
+
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import os
+import json
+import gzip
+import h5py
+import time
+import shutil
+
+import numpy as np
+import pandas as pd
+import utils
+from utils import cbot
+
+RESET_ALL = True
+
+__DIR__ = os.path.dirname(os.path.abspath(__file__))
+SOURCE_DIR = os.path.join(__DIR__, "./datasets/raw_games/")
+
+def load_file(path):
+    content = gzip.open(os.path.join(SOURCE_DIR, path)).read()
+
+    if len(content) == 0:
+        return False
+
+    data = json.loads(content)
+
+    if data["ts"] < 0:
+        return False
+
+    return data
+
+files = os.listdir(SOURCE_DIR)
+libc = cbot.CBot()
+j = 0
+t0 = time.time()
+
+for file in files:
+    #if "ster_2403603_391518026.json.gz" not in file:
+    #    continue
+
+    per_sec = (j+1) / (time.time() - t0 + 0.01)
+    eta = (len(files) - j) / per_sec
+    print "Done %d/%d [rate %.1f/sec][eta %.2f minutes]" % (j+1, len(files), per_sec, eta / 60.0)
+    print file
+    j += 1
+
+    data = load_file(file)
+
+    if not data:
+        continue
+
+    p1_wins = data["ranks"][0] == 0
+    libc.prepare_new_game(p1_wins, data["grid"])
+
+    try:
+        libc.run_game(data["frames"])
+    except Exception, e:
+        print e
+        raise e
+
+    if libc.parsing_success:
+        pass
+

@@ -1,0 +1,4 @@
+datasets/*
+src/*.so
+src/exec-bot
+*.pyc
