@@ -1,0 +1,242 @@
+
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import os
+import json
+import time
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from utils import view
+
+
+df = pd.read_csv("stats.csv")
+
+"""
+nturns 0 # mean & std
+p1_won 0 # mean
+wall_ratio 0 # independant
+
+w_ninvalid 0 # invalid vs rank
+
+w_actions []
+l_actions []
+
+w_nmines 0 # vs rank
+l_nmines 0 # vs rank
+
+w_ntowers 0 # vs rank
+l_ntowers 0 # vs rank
+
+w_actives []
+l_actives []
+
+w_units []
+l_units []
+
+w_income []
+l_income []
+
+w_upkeep []
+l_upkeep []
+
+w_lvl1 0 # vs rank
+w_lvl2 0 # vs rank
+w_lvl3 0 # vs rank
+l_lvl1 0 # vs rank
+l_lvl2 0 # vs rank
+l_lvl3 0 # vs rank
+"""
+
+def get_trend(df, key, l=100):
+    tata = np.ones(l)
+    toto = np.ones(l)
+    for _, row in df.iterrows():
+        tmp = np.array(json.loads(row[key]))
+        l_ = min(l, len(tmp))
+
+        tata[:l_] += tmp[:l_]
+        toto[:l_] += 1.
+
+    return tata / toto
+
+l = len(df)
+print len(df)
+print len(df[df.p1_won]) / float(len(df))
+
+df = df[df["rank"] < 200]
+df["rank_"] = map(lambda x: int(x/5)*5, df["rank"])
+
+df["ninvalid"] = (df["l_ninvalid"] + df["w_ninvalid"]) / 2
+df["ntowers"] = (df["l_ntowers"] + df["w_ntowers"]) / 2
+df["nmines"] = (df["l_nmines"] + df["w_nmines"]) / 2
+
+df1 = df[df["rank"] <= 20]
+df2 = df[df["rank"] > 20]
+
+dataset = {
+    "w_lvl1": [],
+    "w_lvl2": [],
+    "w_lvl3": [],
+    "l_lvl1": [],
+    "l_lvl2": [],
+    "l_lvl3": [],
+
+    "nturns": [],
+    "p1_won": [],
+    "ninvalid": [],
+    "w_nmines": [],
+    "l_nmines": [],
+    "w_ntowers": [],
+    "l_ntowers": [],
+}
+y = []
+
+for r, df_ in df.groupby('rank_'):
+    y.append(r)
+
+    for k in dataset:
+        dataset[k].append(df_[k].mean())
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(y, dataset["w_lvl1"], label="Avg for the winner")
+plt.plot(y, dataset["l_lvl1"], label="Avg for the loser")
+plt.xlabel("Rank")
+plt.title("Average lvl 1 units trained per game")
+plt.legend()
+plt.savefig("a.png")
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(y, dataset["w_lvl2"], label="Avg for the winner")
+plt.plot(y, dataset["l_lvl2"], label="Avg for the loser")
+plt.xlabel("Rank")
+plt.title("Average lvl 2 units trained per game")
+plt.legend()
+plt.savefig("b.png")
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(y, dataset["w_lvl3"], label="Avg for the winner")
+plt.plot(y, dataset["l_lvl3"], label="Avg for the loser")
+plt.xlabel("Rank")
+plt.title("Average lvl 3 units trained per game")
+plt.legend()
+plt.savefig("c.png")
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(y, dataset["ninvalid"])
+plt.xlabel("Rank")
+plt.title("Number of invalid actions per game")
+plt.savefig("d_.png")
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(y, dataset["w_ntowers"], label="Avg for the winner")
+plt.plot(y, dataset["l_ntowers"], label="Avg for the loser")
+plt.xlabel("Rank")
+plt.title("Average towers built per game")
+plt.legend()
+plt.savefig("d.png")
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(y, dataset["w_nmines"], label="Avg for the winner")
+plt.plot(y, dataset["l_nmines"], label="Avg for the loser")
+plt.xlabel("Rank")
+plt.title("Average mines built per game")
+plt.legend()
+plt.savefig("e.png")
+
+
+df1 = df[df["rank"] < 25]
+df2 = df[df["rank"] > 25]
+df_by_ranks = [df1, df2]
+labels = ["Top 1-25", "Top 26-200"]
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(get_trend(df1, "w_income", 20), label="Winner Top 1-25")
+plt.plot(get_trend(df2, "w_income", 20), label="Winner Top 25-200")
+plt.plot(get_trend(df1, "l_income", 20), label="Loser Top 1-25")
+plt.plot(get_trend(df2, "l_income", 20), label="Loser Top 25-200")
+plt.xlabel("Turn #")
+plt.title("Average Income")
+plt.legend()
+plt.savefig("f.png")
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(get_trend(df1, "w_actions", 20), label="Winner Top 1-25")
+plt.plot(get_trend(df2, "w_actions", 20), label="Winner Top 25-200")
+plt.plot(get_trend(df1, "l_actions", 20), label="Loser Top 1-25")
+plt.plot(get_trend(df2, "l_actions", 20), label="Loser Top 25-200")
+plt.xlabel("Turn #")
+plt.title("Average Commands/turn")
+plt.legend()
+plt.savefig("g.png")
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(get_trend(df1, "w_actives", 20), label="Winner Top 1-25")
+plt.plot(get_trend(df2, "w_actives", 20), label="Winner Top 25-200")
+plt.plot(get_trend(df1, "l_actives", 20), label="Loser Top 1-25")
+plt.plot(get_trend(df2, "l_actives", 20), label="Loser Top 25-200")
+plt.xlabel("Turn #")
+plt.title("Average active tiles")
+plt.legend()
+plt.savefig("h.png")
+
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(get_trend(df1, "w_upkeep", 20), label="Winner Top 1-25")
+plt.plot(get_trend(df2, "w_upkeep", 20), label="Winner Top 25-200")
+plt.plot(get_trend(df1, "l_upkeep", 20), label="Loser Top 1-25")
+plt.plot(get_trend(df2, "l_upkeep", 20), label="Loser Top 25-200")
+plt.xlabel("Turn #")
+plt.title("Average Upkeep")
+plt.legend()
+plt.savefig("i.png")
+
+
+fig = plt.figure()
+fig.set_size_inches(8., 6.)
+plt.plot(get_trend(df1, "w_units", 20), label="Winner Top 1-25")
+plt.plot(get_trend(df2, "w_units", 20), label="Winner Top 25-200")
+plt.plot(get_trend(df1, "l_units", 20), label="Loser Top 1-25")
+plt.plot(get_trend(df2, "l_units", 20), label="Loser Top 25-200")
+plt.xlabel("Turn #")
+plt.title("Average Number of Units")
+plt.legend()
+plt.savefig("j.png")
+
+plt.show()
+
+"""
+
+for k, range_, title in [
+        #["w_lvl1", [0, 40], "lvl1 units trained"],
+        #["w_lvl2", [0, 15], "lvl2 units trained"],
+        #["l_lvl1", [0, 40], "l_lvl1"],
+        #["l_lvl2", [0, 15], "l_lvl2"],
+        #["l_lvl3", [0, 10], "l_lvl3"],
+        ]:
+
+
+    fig = plt.figure()
+    fig.set_size_inches(8., 6.)
+    view.reset_ccycle()
+    ax = plt.gca()
+    view.use_percents(ax)
+    arr = [df_[k] for df_ in df_by_ranks]
+    view.plot_histograms(arr, labels, ax, parallel=True, range=range_, bins=15)
+    plt.title(title)
+    plt.legend()
+    plt.show()
+"""
+

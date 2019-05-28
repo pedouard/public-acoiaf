@@ -114,3 +114,4 @@ for file in files:
 df = pd.DataFrame(data_dict)
 df.to_csv("stats.csv")
 
+
