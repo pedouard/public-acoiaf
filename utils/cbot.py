@@ -154,16 +154,21 @@ class CBot():
         self.p1_wins = None
         self.parsing_success = False
         self.is_swapped = False
+        self.is_winner = False
+        self.turn = 0
 
         self.dataset = None
 
     def prepare_new_game(self, p1_wins, grid):
         self.is_swapped = False
+        self.is_winner = p1_wins
         self.p1_wins = p1_wins
+        self.turn = 0
 
         self.libc.py_set_ctx(byref(self.ctx))
         self.libc.py_reset()
         self.libc.py_get_ctx(byref(self.ctx))
+        nwalls = 0.
 
         for i, arr in enumerate(grid):
             for j, v in enumerate(arr):
@@ -171,6 +176,7 @@ class CBot():
 
                 if int(v) == 0:
                     self.ctx.board[x + SIZE*y].wall = 1
+                    nwalls += 1.0
                 elif int(v) == 1:
                     pass
                 elif int(v) == 2:
@@ -188,12 +194,78 @@ class CBot():
         self.libc.py_set_ctx(byref(self.ctx))
 
         self.dataset = {
+            "nturns": 0, # Ok
+            "p1_won": p1_wins, # Ok
+            "wall_ratio": nwalls / (12.0**2), # Ok
+            "rank": None, # Ok
+
+            "w_ninvalid": 0, # OK
+            "l_ninvalid": 0, # OK
+
+            "w_actions": [], # Ok
+            "l_actions": [], # Ok
+
+            "w_nmines": 0, # Ok
+            "l_nmines": 0, # Ok
+
+            "w_ntowers": 0, # Ok
+            "l_ntowers": 0, # Ok
+
+            "w_actives": [], # Ok
+            "l_actives": [], # Ok
+
+            "w_units": [], # Ok
+            "l_units": [], # Ok
+
+            "w_income": [], # Ok
+            "l_income": [], # Ok
+
+            "w_upkeep": [], # Ok
+            "l_upkeep": [], # Ok
+
+            "w_lvl1": 0, # Ok
+            "w_lvl2": 0, # Ok
+            "w_lvl3": 0, # Ok
+
+            "l_lvl1": 0, # Ok
+            "l_lvl2": 0, # Ok
+            "l_lvl3": 0, # Ok
         }
+
+    def _add_endturn(self):
+        self.libc.py_get_ctx(byref(self.ctx))
+
+        upkeep = 0
+        for i in range(self.ctx.p1.nunits):
+            u = self.ctx.p1.units[i]
+            if u.lvl == 1:
+                upkeep += 1
+            elif u.lvl == 2:
+                upkeep += 4
+            else:
+                upkeep += 20
+
+        if self.is_winner:
+            self.dataset["w_units"].append(self.ctx.p1.nunits)
+            self.dataset["w_upkeep"].append(upkeep)
+            self.dataset["w_income"].append(self.ctx.p1.income)
+            self.dataset["w_actives"].append(self.ctx.p1.nactive)
+        else:
+            self.dataset["l_units"].append(self.ctx.p1.nunits)
+            self.dataset["l_upkeep"].append(upkeep)
+            self.dataset["l_income"].append(self.ctx.p1.income)
+            self.dataset["l_actives"].append(self.ctx.p1.nactive)
+
 
     def run_game(self, frames):
         turn = 0
         previous_player = 0
         self.libc.py_new_turn()
+
+        if self.is_winner:
+            self.dataset["w_actions"].append(0)
+        else:
+            self.dataset["l_actions"].append(0)
 
         for fid, f in enumerate(frames):
             lvl = f["lvl"]
@@ -205,8 +277,19 @@ class CBot():
                 agentid = int(summary[1])
 
             if agentid != previous_player:
+                self._add_endturn()
                 self.swap_players()
+
+                if self.is_winner:
+                    self.dataset["w_actions"].append(0)
+                else:
+                    self.dataset["l_actions"].append(0)
+
                 previous_player = agentid
+                if agentid == 0:
+                    self.turn += 1
+                    self.dataset["nturns"] += 1
+
 
             if len(summary) == 0:
                 cmd_successful = False
@@ -216,6 +299,11 @@ class CBot():
                 self.parsing_success = False
                 return
 
+            if self.is_winner:
+                self.dataset["w_ninvalid"] += len(summary.split("\n")) - 2
+            else:
+                self.dataset["l_ninvalid"] += len(summary.split("\n")) - 2
+
             cmd_successful, cmd = try_parse_action(summary, lvl, self.is_swapped)
             if not cmd_successful:
                 # Failed to parse
@@ -223,6 +311,29 @@ class CBot():
 
             if self.game_is_over():
                 print "Game over too early"
+
+            if cmd.type == CMD_BUILD and cmd.param == TYPE_MINE:
+                if self.is_winner:
+                    self.dataset["w_nmines"] += 1.
+                else:
+                    self.dataset["l_nmines"] += 1.
+
+            if cmd.type == CMD_BUILD and cmd.param == TYPE_TOWER:
+                if self.is_winner:
+                    self.dataset["w_ntowers"] += 1.
+                else:
+                    self.dataset["l_ntowers"] += 1.
+
+            if cmd.type == CMD_TRAIN:
+                if self.is_winner:
+                    self.dataset["w_lvl%d" % cmd.param] += 1.
+                else:
+                    self.dataset["l_lvl%d" % cmd.param] += 1.
+
+            if self.is_winner:
+                self.dataset["w_actions"][-1] += 1
+            else:
+                self.dataset["l_actions"][-1] += 1
 
             #print
             #print "BEFORE"
@@ -234,6 +345,7 @@ class CBot():
             #raw_input()
             turn += 1
 
+        self._add_endturn()
         if cmd_successful:
             assert self.game_is_over(), "Game should be over!"
             self.parsing_success = True
@@ -262,7 +374,8 @@ class CBot():
     def swap_players(self):
         self.libc.py_swap()
         self.libc.py_new_turn()
-        self.is_swapped = ~self.is_swapped
+        self.is_swapped = not self.is_swapped
+        self.is_winner = not self.is_winner
 
 
     """ MISC """

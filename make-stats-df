@@ -36,6 +36,46 @@ libc = cbot.CBot()
 j = 0
 t0 = time.time()
 
+data_dict = {
+    "nturns": [],
+    "p1_won": [],
+    "wall_ratio": [],
+    "rank": [],
+
+    "l_ninvalid": [],
+    "w_ninvalid": [],
+
+    "l_actions": [],
+    "w_actions": [],
+
+    "w_nmines": [],
+    "l_nmines": [],
+
+    "w_ntowers": [],
+    "l_ntowers": [],
+
+    "w_actives": [],
+    "l_actives": [],
+
+    "w_units": [],
+    "l_units": [],
+
+    "w_income": [],
+    "l_income": [],
+
+    "w_upkeep": [],
+    "l_upkeep": [],
+
+    "w_lvl1": [],
+    "w_lvl2": [],
+    "w_lvl3": [],
+
+    "l_lvl1": [],
+    "l_lvl2": [],
+    "l_lvl3": [],
+}
+
+
 for file in files:
     #if "ster_2403603_391518026.json.gz" not in file:
     #    continue
@@ -47,6 +87,11 @@ for file in files:
     j += 1
 
     data = load_file(file)
+
+    if 'rank' in data["agents"][0]:
+        rank = data["agents"][0]['rank']
+    else:
+        rank = data["agents"][1]['rank']
 
     if not data:
         continue
@@ -61,5 +106,11 @@ for file in files:
         raise e
 
     if libc.parsing_success:
-        pass
+        libc.dataset["rank"] = rank
+
+        for k, v in libc.dataset.items():
+            data_dict[k].append(v)
+
+df = pd.DataFrame(data_dict)
+df.to_csv("stats.csv")
 

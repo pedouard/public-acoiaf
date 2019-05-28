@@ -24,14 +24,3 @@ TYPE_TOWER = +2
 CMD_TRAIN = +0
 CMD_BUILD = +1
 CMD_MOVE = +2
-
-"""
-Life expectancy of units, usefullness
-
-Blue side vs red side
-
-Winrate with mines
-
-Is income worth it ?
-"""
-
